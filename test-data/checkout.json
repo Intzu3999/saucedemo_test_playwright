@@ -1,0 +1,11 @@
+{
+  "validCustomer": {
+    "firstName": "Evelyn",
+    "lastName": "Keoy",
+    "postalCode": "50000"
+  },
+  "expectedConfirmation": {
+    "header": "Thank you for your order!",
+    "text": "Your order has been dispatched"
+  }
+}

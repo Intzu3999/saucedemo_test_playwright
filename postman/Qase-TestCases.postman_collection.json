@@ -1,0 +1,201 @@
+{
+  "info": {
+    "_postman_id": "5f9c0a8f-4a2c-4bd9-9f0e-89f4a1a5eb42",
+    "name": "Qase.io - Test Cases API v1",
+    "description": "Postman collection covering the primary Qase TestOps `/case/{code}` endpoints (https://developers.qase.io/reference/get-cases). Auth is via the `Token` header, which is applied at collection level from the {{qase_api_token}} variable. Switch projects by editing {{qase_project_code}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "in", "value": "header", "type": "string" },
+      { "key": "key", "value": "Token", "type": "string" },
+      { "key": "value", "value": "{{qase_api_token}}", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "Cases",
+      "item": [
+        {
+          "name": "Get all test cases",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/case/{{qase_project_code}}?limit=10&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["case", "{{qase_project_code}}"],
+              "query": [
+                { "key": "search", "value": "", "description": "Search cases by name (partial match)", "disabled": true },
+                { "key": "milestone_id", "value": "", "description": "Filter by milestone id", "disabled": true },
+                { "key": "suite_id", "value": "", "description": "Filter by suite id", "disabled": true },
+                { "key": "severity", "value": "", "description": "CSV of: undefined|blocker|critical|major|normal|minor|trivial", "disabled": true },
+                { "key": "priority", "value": "", "description": "CSV of: undefined|high|medium|low", "disabled": true },
+                { "key": "type", "value": "", "description": "CSV of: other|functional|smoke|regression|security|usability|performance|acceptance", "disabled": true },
+                { "key": "behavior", "value": "", "description": "CSV of: undefined|positive|negative|destructive", "disabled": true },
+                { "key": "automation", "value": "", "description": "CSV of: is-not-automated|automated|to-be-automated", "disabled": true },
+                { "key": "status", "value": "", "description": "CSV of: actual|draft|deprecated", "disabled": true },
+                { "key": "include", "value": "external_issues", "description": "Comma-separated relations to include", "disabled": true },
+                { "key": "limit", "value": "10", "description": "1..100" },
+                { "key": "offset", "value": "0", "description": "0..100000" }
+              ]
+            },
+            "description": "Returns a paginated list of cases for the project. Response: `TestCaseListResponse`."
+          },
+          "response": []
+        },
+        {
+          "name": "Get a single case",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/case/{{qase_project_code}}/{{case_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["case", "{{qase_project_code}}", "{{case_id}}"]
+            },
+            "description": "Fetch a single test case by internal id (not the human-readable AP-T### key)."
+          },
+          "response": []
+        },
+        {
+          "name": "Create a case",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Login with valid credentials\",\n  \"description\": \"Verify a valid user reaches inventory after login.\",\n  \"severity\": 3,\n  \"priority\": 2,\n  \"type\": 1,\n  \"behavior\": 1,\n  \"is_manual\": false,\n  \"steps_type\": \"classic\",\n  \"steps\": [\n    { \"action\": \"Navigate to https://www.saucedemo.com\", \"expected_result\": \"Login form is visible\" },\n    { \"action\": \"Enter valid username and password, click Login\", \"expected_result\": \"Inventory page is displayed\" }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/case/{{qase_project_code}}",
+              "host": ["{{base_url}}"],
+              "path": ["case", "{{qase_project_code}}"]
+            },
+            "description": "Create a new test case. `severity`, `priority`, `type`, `behavior` are integer enum ids -- see Qase docs."
+          },
+          "response": []
+        },
+        {
+          "name": "Update a case",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Login with valid credentials (updated)\",\n  \"priority\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/case/{{qase_project_code}}/{{case_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["case", "{{qase_project_code}}", "{{case_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a case",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/case/{{qase_project_code}}/{{case_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["case", "{{qase_project_code}}", "{{case_id}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Projects (helper)",
+      "item": [
+        {
+          "name": "Get all projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/project?limit=10&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["project"],
+              "query": [
+                { "key": "limit", "value": "10" },
+                { "key": "offset", "value": "0" }
+              ]
+            },
+            "description": "Useful sanity check that the token is valid before hitting /case endpoints."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Runs (helper)",
+      "item": [
+        {
+          "name": "Get all runs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/run/{{qase_project_code}}?limit=10&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["run", "{{qase_project_code}}"],
+              "query": [
+                { "key": "limit", "value": "10" },
+                { "key": "offset", "value": "0" }
+              ]
+            },
+            "description": "List runs for the project -- confirm the Playwright reporter has been publishing."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('status is 2xx', () => pm.response.to.be.success);",
+          "pm.test('response is JSON', () => pm.response.to.be.json);"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://api.qase.io/v1",
+      "type": "string",
+      "description": "Qase TestOps API v1 base URL."
+    },
+    {
+      "key": "qase_project_code",
+      "value": "SAUCEPW",
+      "type": "string",
+      "description": "Project code (2..10 chars). Matches the value in .env."
+    },
+    {
+      "key": "qase_api_token",
+      "value": "",
+      "type": "string",
+      "description": "Paste your Qase API token here. Do NOT commit real tokens back to git."
+    },
+    {
+      "key": "case_id",
+      "value": "1",
+      "type": "string",
+      "description": "Internal id of a test case (integer). Not the AP-T### key."
+    }
+  ]
+}

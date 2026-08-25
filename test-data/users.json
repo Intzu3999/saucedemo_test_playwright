@@ -1,0 +1,39 @@
+{
+  "standard": {
+    "username": "standard_user",
+    "password": "secret_sauce",
+    "description": "Standard user with full access, happy path baseline"
+  },
+  "lockedOut": {
+    "username": "locked_out_user",
+    "password": "secret_sauce",
+    "description": "User that is locked out and cannot log in"
+  },
+  "problem": {
+    "username": "problem_user",
+    "password": "secret_sauce",
+    "description": "Login succeeds. Multiple UI bugs: same image for every product, add-to-cart only works for products 1/2/5, remove button broken, checkout last-name routes into first-name field"
+  },
+  "performanceGlitch": {
+    "username": "performance_glitch_user",
+    "password": "secret_sauce",
+    "description": "Login succeeds but every action (login redirect, click, input) is delayed several seconds"
+  },
+  "error": {
+    "username": "error_user",
+    "password": "secret_sauce",
+    "description": "Login succeeds. Checkout last-name field is unresponsive; clicking Continue with empty last name silently navigates back one page instead of showing the required-field error"
+  },
+  "visual": {
+    "username": "visual_user",
+    "password": "secret_sauce",
+    "description": "Login succeeds. The 6th product's Add-to-Cart button overflows outside its card"
+  },
+  "invalid": {
+    "username": "invalid_user",
+    "password": "wrong_password",
+    "description": "Non-existent credentials",
+    "expectedError": "Epic sadface: Username and password do not match any user in this service"
+  },
+  "lockedOutError": "Epic sadface: Sorry, this user has been locked out."
+}

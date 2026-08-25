@@ -1,0 +1,169 @@
+{
+  "info": {
+    "_postman_id": "b6e2f42a-8c50-4c53-9c9e-1c1c9f2ea111",
+    "name": "DummyJSON - Carts API",
+    "description": "Postman collection for the DummyJSON Carts endpoints (https://dummyjson.com/docs/carts). No auth required. Use the {{base_url}} collection variable to switch environments.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get all carts",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/carts?limit=30&skip=0",
+          "host": ["{{base_url}}"],
+          "path": ["carts"],
+          "query": [
+            { "key": "limit", "value": "30", "description": "Max items to return (default 30)" },
+            { "key": "skip", "value": "0", "description": "Items to skip for pagination" }
+          ]
+        },
+        "description": "Returns a paginated list of carts."
+      },
+      "response": []
+    },
+    {
+      "name": "Get a single cart",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/carts/{{cart_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["carts", "{{cart_id}}"]
+        },
+        "description": "Fetch a specific cart by its id."
+      },
+      "response": []
+    },
+    {
+      "name": "Get carts by user",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/carts/user/{{user_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["carts", "user", "{{user_id}}"]
+        },
+        "description": "All carts belonging to a given user id."
+      },
+      "response": []
+    },
+    {
+      "name": "Add a new cart",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 1,\n  \"products\": [\n    { \"id\": 144, \"quantity\": 4 },\n    { \"id\": 98, \"quantity\": 1 }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/carts/add",
+          "host": ["{{base_url}}"],
+          "path": ["carts", "add"]
+        },
+        "description": "Simulates creating a new cart. Server does not persist the change."
+      },
+      "response": []
+    },
+    {
+      "name": "Update a cart (PUT)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"merge\": true,\n  \"products\": [\n    { \"id\": 1, \"quantity\": 1 }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/carts/{{cart_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["carts", "{{cart_id}}"]
+        },
+        "description": "Pass `merge: true` to keep existing products and add the new ones."
+      },
+      "response": []
+    },
+    {
+      "name": "Update a cart (PATCH)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"merge\": false,\n  \"products\": [\n    { \"id\": 1, \"quantity\": 2 }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/carts/{{cart_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["carts", "{{cart_id}}"]
+        },
+        "description": "PATCH variant of update. Same body shape as PUT."
+      },
+      "response": []
+    },
+    {
+      "name": "Delete a cart",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/carts/{{cart_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["carts", "{{cart_id}}"]
+        },
+        "description": "Simulates a delete. Server does not persist the change; returns the cart with `isDeleted` + `deletedOn`."
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('status is 2xx', () => pm.response.to.be.success);",
+          "pm.test('response is JSON', () => pm.response.to.be.json);"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://dummyjson.com",
+      "type": "string",
+      "description": "Base URL for DummyJSON. Override per environment if you need a proxy."
+    },
+    {
+      "key": "cart_id",
+      "value": "1",
+      "type": "string",
+      "description": "Cart id used by single-cart endpoints. Range 1..50."
+    },
+    {
+      "key": "user_id",
+      "value": "5",
+      "type": "string",
+      "description": "User id used by /carts/user/:id endpoint."
+    }
+  ]
+}
