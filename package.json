@@ -1,0 +1,31 @@
+{
+  "name": "playwright_demo",
+  "version": "0.1.0",
+  "description": "Playwright UI automation framework for saucedemo.com using Page Object Model, with Qase.IO reporting and CI/CD integrations.",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:chromium": "playwright test --project=chromium",
+    "test:qase": "cross-env QASE_MODE=testops playwright test",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install --with-deps"
+  },
+  "keywords": [
+    "playwright",
+    "automation",
+    "e2e",
+    "pom",
+    "qase",
+    "saucedemo"
+  ],
+  "author": "Evelyn Keoy <intzucareers@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "cross-env": "^10.1.0",
+    "dotenv": "^17.4.2",
+    "playwright-qase-reporter": "^2.7.0"
+  }
+}

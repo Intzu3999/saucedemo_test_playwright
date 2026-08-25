@@ -1,0 +1,74 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      qase_mode:
+        description: 'Qase reporter mode (off | testops)'
+        required: false
+        default: 'off'
+
+jobs:
+  test:
+    name: Run Playwright tests
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+
+    env:
+      BASE_URL: https://www.saucedemo.com
+      STANDARD_USER: standard_user
+      LOCKED_OUT_USER: locked_out_user
+      PROBLEM_USER: problem_user
+      PERFORMANCE_GLITCH_USER: performance_glitch_user
+      VALID_PASSWORD: secret_sauce
+      INVALID_USER: invalid_user
+      INVALID_PASSWORD: wrong_password
+      HEADLESS: 'true'
+      BROWSER: chromium
+      REQRES_BASE_URL: https://reqres.in/api
+      # Qase reporter - defaults to off; can be flipped via manual trigger or
+      # by setting the QASE_TESTOPS_API_TOKEN secret in the repo.
+      QASE_MODE: ${{ github.event.inputs.qase_mode || (secrets.QASE_TESTOPS_API_TOKEN != '' && 'testops' || 'off') }}
+      QASE_TESTOPS_API_TOKEN: ${{ secrets.QASE_TESTOPS_API_TOKEN }}
+      QASE_TESTOPS_PROJECT: ${{ vars.QASE_TESTOPS_PROJECT || 'DEMO' }}
+      QASE_TESTOPS_RUN_TITLE: "GH Actions - ${{ github.run_number }} - ${{ github.ref_name }}"
+      QASE_TESTOPS_RUN_COMPLETE: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: npx playwright test
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results (traces, screenshots, videos)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 14
