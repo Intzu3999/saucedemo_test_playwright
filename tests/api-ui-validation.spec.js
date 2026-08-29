@@ -1,49 +1,35 @@
 // @ts-check
-const { test, expect, request: playwrightRequest } = require('@playwright/test');
+//
+// Bonus scenario: API + UI validation.
+//
+// Pulls a real user record from https://dummyjson.com/users/1 via our API
+// client, then drives the saucedemo.com checkout flow using those API-supplied
+// values. If either side changes shape, this spec fails.
+//
+// Notice how zero HTTP boilerplate lives in this file. All request-building is
+// delegated to `api/DummyJsonUsersApi.js`, exactly like all locator-building
+// is delegated to `pages/*.js`.
+
+const { test, expect } = require('../utils/fixtures');
 const { CartPage } = require('../pages/CartPage');
 const { CheckoutPage } = require('../pages/CheckoutPage');
 const { CompletePage } = require('../pages/CompletePage');
-const { loginAsStandardUser, testData, envOrDefault } = require('../utils/helpers');
+const { loginAsStandardUser, testData } = require('../utils/helpers');
+const { schemas } = require('../api');
 
-/**
- * Bonus scenario: API + UI validation.
- *
- * We hit the public DummyJSON API to pull real user data, then drive the
- * saucedemo.com checkout flow using that API-supplied data. The UI is asserted
- * against the exact values returned from the API, so a change in either side
- * would surface as a test failure.
- *
- * DummyJSON is used because it is dependable, JSON-native, and provides
- * realistic "user" records with first name / last name / postal code fields.
- * ReqRes would work equivalently but currently gates GET endpoints behind an
- * API key; DummyJSON is unauthenticated and free.
- */
-
-const DUMMYJSON_URL = 'https://dummyjson.com/users/1';
-const IGNORE_HTTPS_ERRORS =
-  (process.env.IGNORE_HTTPS_ERRORS ?? 'false').toLowerCase() === 'true';
-
-test.describe('Bonus - API + UI data validation', () => {
+test.describe('Bonus -- API + UI data validation @api @ui @bonus', () => {
+  /** @type {any} */
   let apiUser;
 
-  test.beforeAll(async () => {
-    const ctx = await playwrightRequest.newContext({
-      ignoreHTTPSErrors: IGNORE_HTTPS_ERRORS,
-    });
-    const res = await ctx.get(DUMMYJSON_URL);
-    expect(res.ok(), `API call to ${DUMMYJSON_URL} should succeed`).toBeTruthy();
+  test.beforeAll(async ({ dummyJsonUsers }) => {
+    const res = await dummyJsonUsers.getUser(1);
+    expect(res.ok(), 'API call for user/1 should succeed').toBeTruthy();
     apiUser = await res.json();
-    await ctx.dispose();
 
-    expect(apiUser.firstName, 'API user must have firstName').toBeTruthy();
-    expect(apiUser.lastName, 'API user must have lastName').toBeTruthy();
-    expect(
-      apiUser?.address?.postalCode,
-      'API user must have postalCode'
-    ).toBeTruthy();
+    expect(apiUser).toEqual(schemas.userSchema);
   });
 
-  test('checkout uses API-sourced customer data and UI reflects it @api @ui @bonus', async ({
+  test('checkout uses API-sourced customer data and UI reflects it', async ({
     page,
   }) => {
     const inventoryPage = await loginAsStandardUser(page);
@@ -72,21 +58,10 @@ test.describe('Bonus - API + UI data validation', () => {
     await completePage.assertOrderSuccessful();
   });
 
-  test('API contract sanity check @api @contract', async ({ request }) => {
-    const res = await request.get(DUMMYJSON_URL);
+  test('API contract sanity check @contract', async ({ dummyJsonUsers }) => {
+    const res = await dummyJsonUsers.getUser(1);
     expect(res.status()).toBe(200);
     const body = await res.json();
-    // Minimum schema we depend on.
-    expect(body).toEqual(
-      expect.objectContaining({
-        firstName: expect.any(String),
-        lastName: expect.any(String),
-        address: expect.objectContaining({
-          postalCode: expect.anything(),
-        }),
-      })
-    );
-    // Silence unused-var lint for the env helper - shows how helpers plug in.
-    expect(envOrDefault('REQRES_BASE_URL', 'https://reqres.in/api')).toBeTruthy();
+    expect(body).toEqual(schemas.userSchema);
   });
 });

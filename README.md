@@ -1,136 +1,287 @@
-# Playwright Demo - saucedemo.com Automation Framework
+# SauceDemo Playwright Test Framework
 
-A maintainable UI automation framework built with [Playwright](https://playwright.dev)
-using the Page Object Model pattern, targeting
-[https://www.saucedemo.com](https://www.saucedemo.com).
-
-Includes:
-
-- Four required end-to-end scenarios (login, cart, checkout, invalid login).
-- Bonus API + UI validation scenario using the public DummyJSON API.
-- Parameterised regression suite covering all six saucedemo users and their
-  distinct UI/performance bugs.
-- HTML, JUnit, and [Qase.IO](https://qase.io) reporters.
-- GitHub Actions workflow and a Jenkins declarative pipeline.
-- Screenshots, videos, and traces retained on failure.
+End-to-end UI + API automation framework for
+[https://www.saucedemo.com](https://www.saucedemo.com), built with Playwright
+and the Page Object Model pattern.
 
 ---
 
-## Table of Contents
-
-1. [Framework overview](#framework-overview)
-2. [Setup](#setup)
-3. [Running tests](#running-tests)
-4. [Folder structure](#folder-structure)
-5. [Assumptions](#assumptions)
-
----
-
-## Framework overview
-
-- **Language / runtime:** JavaScript on Node.js 20+.
-- **Test runner:** `@playwright/test`.
-- **Design pattern:** Page Object Model. Each screen has its own class under
-  `pages/`, extending a shared `BasePage`. Locators live inside the page
-  objects; specs only call semantic methods (`login`, `addProductToCart`,
-  `finish`, etc.).
-- **Test data:** Externalised in `test-data/*.json` and consumed via
-  `utils/helpers.js` so specs remain declarative and data-driven.
-- **Configuration:** Environment-driven through `dotenv`. All tunables (base
-  URL, credentials, retries, headless mode, Qase settings) live in `.env`.
-- **Reporting:** Playwright HTML report + JUnit + optional Qase.IO cloud
-  reporting when `QASE_MODE=testops`.
-- **Failure diagnostics:** Screenshots (`only-on-failure`), videos and traces
-  (`retain-on-failure`), plus artefacts uploaded by the CI pipeline.
-- **CI/CD:** GitHub Actions workflow (`.github/workflows/playwright.yml`) and
-  a Jenkins declarative pipeline (`Jenkinsfile`) are both pre-wired.
-
----
-
-## Setup
-
-Requires **Node.js 20 or newer** and **npm**.
+## Quick start
 
 ```bash
-git clone git@github.com:Intzu3999/playwright_demo.git
-cd playwright_demo
+git clone git@github.com:Intzu3999/saucedemo_test_playwright.git
+cd saucedemo_test_playwright
 
 npm ci
 npx playwright install --with-deps chromium
 
-cp .env.example .env
+npm test
 ```
 
-`.env` is gitignored -- adjust it for your machine. `.env.example` is the
-committed template with sensible defaults.
+**What you should see after `npm test` (39 tests total):**
+
+- **29 pass** -- everything the framework claims should work, works.
+- **10 fail** -- these are SauceDemo's *own* known product bugs, tagged
+  `@known-bug`. They are real defects on the site (not framework issues); the
+  tests are asserting the correct behaviour and calling them out. See
+  [Expected test results](#expected-test-results) below.
+
+To open the HTML report:
+
+```bash
+npm run report
+```
 
 ---
 
-## Running tests
+## Run modes
 
-```bash
-# Run every test in headless mode (default configuration)
-npx playwright test
-
-# Convenience scripts
-npm test               # same as npx playwright test
-npm run test:headed    # run with a visible browser
-npm run test:ui        # Playwright's interactive UI mode
-npm run test:chromium  # explicit chromium-only run
-npm run test:qase      # enable Qase.IO reporter (requires token in .env)
-npm run report         # open the last HTML report
-```
-
-Filter by tag:
-
-```bash
-npx playwright test --grep "@smoke"
-npx playwright test --grep "@checkout"
-npx playwright test --grep "@bonus"
-```
-
-Reports are written to:
-
-- `playwright-report/index.html` -- open with `npm run report`.
-- `test-results/junit.xml` -- consumed by Jenkins and other CI tools.
-- `test-results/` -- traces, videos, and screenshots for failing tests.
+| Command | What it runs | Expected result |
+|---|---|---|
+| `npm test` | Everything (39 tests) | 29 pass + 10 fail (known bugs) |
+| `npm run test:ci` | Everything except `@known-bug` | 28 pass, all green (used by CI) |
+| `npm run test:known-bugs` | Only `@known-bug` (11 tests) | 10 fail (bug still present) + 1 pass (see note) |
+| `npm run test:smoke` | Only `@smoke` | 4 pass |
+| `npm run test:headed` | Everything with a visible browser | Same as `npm test` |
+| `npm run test:ui` | Playwright's interactive UI mode | Interactive |
+| `npm run test:qase` | Publish results to Qase.io | Same as `npm test`, plus cloud upload |
 
 ---
 
-## Folder structure
+## Expected test results
+
+The suite exercises three groups. Every row here is a real test in the code
+and this is the healthy state today (Aug 2026).
+
+### 1. Core happy-path & negative scenarios (10 tests, all PASS)
+
+| # | Scenario | Expected result |
+|---|---|---|
+| 1 | `standard_user` logs in and lands on `/inventory.html` | PASS |
+| 2 | Add "Sauce Labs Backpack" to cart, badge shows 1 | PASS |
+| 3 | Add 2 products, both appear in cart | PASS |
+| 4 | Full happy-path checkout ends on order-complete page | PASS |
+| 5 | `invalid_user` sees "Username and password do not match..." | PASS |
+| 6 | `locked_out_user` sees the locked-out error | PASS |
+| 7 | Missing first name blocks checkout progression | PASS |
+| 8 | Bonus -- API user (DummyJSON `/users/1`) drives full checkout | PASS |
+| 9 | Bonus -- API contract sanity check | PASS |
+| 10 | Login matrix (6 users) all reach expected outcome | PASS x 6 |
+
+### 2. API contract suite (10 tests, all PASS)
+
+`tests/api-carts.spec.js` covers every HTTP verb against DummyJSON `/carts`
+using the API client layer in `api/`.
+
+| # | Verb | Endpoint | Expected result |
+|---|---|---|---|
+| 1 | GET | `/carts?limit=5` | 200, paginated list |
+| 2 | GET | `/carts/1` | 200, cart shape |
+| 3 | GET | `/carts/user/5` | 200, all carts for user 5 |
+| 4 | POST | `/carts/add` | 200, computed totals |
+| 5 | PUT | `/carts/1` (merge=true) | 200, existing + new products |
+| 6 | PATCH | `/carts/1` (merge=false) | 200, replaced products |
+| 7 | DELETE | `/carts/1` | 200, `isDeleted: true` |
+| 8 | GET | `/carts/99999` | 404 |
+| 9 | GET | `/carts?limit=-1` | Records current behaviour |
+| 10 | GET | `/carts?limit=10000` | Records current behaviour |
+
+### 3. Known-bug regression (11 tests, 10 FAIL and 1 PASS -- and this is deliberate)
+
+Each of these tests asserts what a **correctly-working** SauceDemo would do.
+When the site's bug is present, the assertion fails red -- exactly the signal
+we want. When SauceDemo fixes a bug, the test flips green and we drop the
+`@known-bug` tag. Every failing row here is a real product defect, not a
+framework issue.
+
+| # | User | Test | Observed / expected behaviour | Result today |
+|---|---|---|---|---|
+| 1 | problem_user | All 6 product images should be unique | All 6 point to the same placeholder image | **FAIL (known bug)** |
+| 2 | problem_user | Add product #3 (Bolt T-Shirt) to cart | Add-to-Cart click has no effect for this product | **FAIL (known bug)** |
+| 3 | problem_user | Add product #4 (Fleece Jacket) to cart | Same as above | **FAIL (known bug)** |
+| 4 | problem_user | Add product #6 (Red T-Shirt) to cart | Same as above | **FAIL (known bug)** |
+| 5 | problem_user | Remove product from cart | Remove button is unwired -- item stays | **FAIL (known bug)** |
+| 6 | problem_user | Last-name field accepts input independently | Typed characters route into First-Name field | **FAIL (known bug)** |
+| 7 | performance_glitch | Login redirect completes in < 3s | Redirect takes 5+ seconds | **FAIL (known bug)** |
+| 8 | performance_glitch | Add-to-cart badge updates in < 3s | Currently meets SLA -- may be action-specific | **PASS (see note)** |
+| 9 | error_user | Last-name field is responsive | Field ignores keyboard input | **FAIL (known bug)** |
+| 10 | error_user | Empty last name shows inline error | Continue silently navigates back one page | **FAIL (known bug)** |
+| 11 | visual_user | 6th product's Add-to-Cart button stays in card | Button overflows the card boundary | **FAIL (known bug)** |
+
+> **Note on test #8:** the click-latency SLA of 3 seconds *is* met on the
+> Add-to-Cart action today, even though the login redirect is still slow.
+> This is a good example of automation surfacing something manual testing
+> can't quantify: SauceDemo's intentional delay may only be wired on some
+> actions. If the site regresses, this test will start failing.
+
+---
+
+## Assumptions & rationale
+
+These are the assumptions I made when deciding what each test should PASS or
+FAIL on. Read this if you want to understand *why* the results table above
+looks the way it does.
+
+### 1. What is being tested
+
+- **The application under test is SauceDemo itself**, a public demo. It is a
+  frozen fixture designed to have intentional bugs baked in. My tests
+  therefore treat the intentional bugs as **real product defects** and assert
+  the correct behaviour -- exactly the same way I would assert against a
+  production application.
+
+### 2. Why bugs are not hidden with `test.fail()`
+
+- SauceDemo ships six user accounts. Five of them (`problem`, `performance_glitch`,
+  `error`, `visual`, plus the special `locked_out`) intentionally exhibit
+  distinct UI or performance bugs. See
+  [`test-data/users.json`](./test-data/users.json) for the observed behaviour
+  per user.
+- **A known bug should be visible as a red fail** in both Playwright's HTML
+  report and in Qase.io. That is the only way a reviewer can tell at a glance
+  which tests correspond to defects.
+- Earlier iterations of this framework wrapped these tests in Playwright's
+  `test.fail()` marker, which made the Playwright report show them as
+  **green (expected failure)** while Qase showed them as **red (failed)**.
+  That inconsistency was removed. Bug present = RED everywhere.
+- CI stays green because CI runs `npm run test:ci` which excludes any test
+  tagged `@known-bug`. When SauceDemo fixes a bug, the test starts passing,
+  we drop the `@known-bug` tag, and CI protects the fix from that point on.
+
+### 3. What "PASS" and "FAIL" mean here
+
+| Verdict | Meaning |
+|---|---|
+| **PASS** | Feature works exactly as the site's own documentation claims. |
+| **FAIL (known bug)** | Feature is intentionally broken by SauceDemo for a specific user. The framework caught it. |
+| **FAIL (unexpected)** | A test regression. Would need investigation -- likely a SauceDemo change or a framework issue. |
+| **BLOCKED** | Test could not run (upstream dependency down, environment issue). |
+
+### 4. Automation-only finding: `problem_user`'s "random" Add-to-Cart bug is deterministic
+
+The prompt described the `problem_user` Add-to-Cart failure as "random". By
+parameterising the test across all 6 products the framework showed the
+"randomness" is actually deterministic:
+
+- Products **1 (Backpack), 2 (Bike Light), 5 (Onesie)** -- Add-to-Cart works.
+- Products **3 (Bolt T-Shirt), 4 (Fleece Jacket), 6 (Red T-Shirt)** -- click
+  is silently swallowed.
+
+This is a documented example of automation adding QA signal that manual
+observation missed.
+
+### 5. Other assumptions
+
+- The default password `secret_sauce` is public demo data and is checked in
+  to `.env.example` -- not a secret leak.
+- `.env` (with the real Qase token) is gitignored and never committed.
+- Chromium alone is sufficient for the assignment; Firefox / WebKit projects
+  are commented out in `playwright.config.js`.
+- The corporate SSL workaround (`IGNORE_HTTPS_ERRORS`) is off by default and
+  is only ever needed locally when running behind a proxy that MITMs TLS
+  (e.g. Zscaler). CI leaves it off so TLS verification stays strict.
+
+---
+
+## Screenshots -- last CI run + Qase.io integration
+
+The screenshots below are from
+[PR #1 -- MVP framework merge](https://github.com/Intzu3999/saucedemo_test_playwright/pull/1),
+which is the first end-to-end demonstration of the pipeline.
+
+### GitHub Actions workflow triggered on PR
+
+![GitHub Actions workflow running](https://github.com/user-attachments/assets/ba5cdd81-8985-413f-952e-b684a8d71fe6)
+
+### Playwright HTML report (downloadable artefact from CI)
+
+![Playwright test run summary + report](https://github.com/user-attachments/assets/23572c3e-0dfd-4d28-94e8-e9b51375ee0b)
+
+Artifact download URL:
+[`actions/runs/32875492209/artifacts/9573767079`](https://github.com/Intzu3999/saucedemo_test_playwright/actions/runs/32875492209/artifacts/9573767079)
+
+### Qase.io -- test run created automatically from Playwright
+
+![Qase test run](https://github.com/user-attachments/assets/bb4a39da-40f1-4423-90dd-99ca39c94798)
+
+### Qase.io -- individual test cases with steps
+
+![Qase test cases with steps](https://github.com/user-attachments/assets/e0bf2973-6e40-4632-8e0b-d878b14f39a2)
+
+### Qase.io -- test result dashboard
+
+![Qase test result dashboard](https://github.com/user-attachments/assets/9f298754-7480-4a34-a938-e662db64f511)
+
+<!--
+  Space for reviewer-visible screenshots I want to add manually:
+
+  1. Playwright HTML report with the 10 red @known-bug failures visible.
+  2. Qase.io view of the same run showing red @known-bug outcomes.
+  3. Any additional dashboards / reporter outputs.
+
+  Just drop images into an `images/` folder and reference them:
+      ![local screenshot](./images/your-screenshot.png)
+-->
+
+---
+
+## Additional information
+
+Everything below is background context for reviewers who want the deeper
+picture. Not needed to run the tests.
+
+### Framework overview
+
+- **Language / runtime:** JavaScript on Node.js 20+.
+- **Test runner:** `@playwright/test`.
+- **Design pattern:** Page Object Model for UI (`pages/*.js`) with a symmetric
+  API request layer (`api/*.js`). Locators and HTTP details live inside
+  those classes; specs only call semantic methods.
+- **Test data:** Externalised as JSON (`test-data/*.json`) and consumed via
+  `utils/helpers.js`.
+- **Fixtures:** `utils/fixtures.js` extends Playwright's `test` to inject
+  pre-configured API clients (`dummyJsonUsers`, `dummyJsonCarts`) the same
+  way `page` is injected for UI tests.
+- **Reporting:** Playwright HTML + JUnit XML + optional Qase.io TestOps
+  publishing.
+- **Failure diagnostics:** Screenshots (on failure), videos and traces
+  (retained on failure) under `test-results/`.
+- **CI/CD:** GitHub Actions workflow (`.github/workflows/playwright.yml`) and
+  a Jenkins declarative pipeline (`Jenkinsfile`) both pre-wired.
+
+### Folder structure
 
 ```
-playwright_demo/
+saucedemo_test_playwright/
 ├── .github/workflows/       # GitHub Actions CI workflow
-│   └── playwright.yml
-├── pages/                   # Page Object Models
+├── pages/                   # Page Object Models (UI locators + actions)
 │   ├── BasePage.js
 │   ├── LoginPage.js
 │   ├── InventoryPage.js
 │   ├── CartPage.js
 │   ├── CheckoutPage.js
 │   └── CompletePage.js
+├── api/                     # API request objects (POM for HTTP)
+│   ├── BaseApi.js                 # get / post / put / patch / delete helpers
+│   ├── DummyJsonUsersApi.js       # /users endpoints
+│   ├── DummyJsonCartsApi.js       # /carts endpoints (all HTTP verbs)
+│   ├── schemas.js                 # Response shape validators
+│   └── index.js
 ├── tests/                   # Test specs
 │   ├── login.spec.js              # Scenario 1 & 4 (valid / invalid login)
 │   ├── cart.spec.js               # Scenario 2 (add to cart)
 │   ├── checkout.spec.js           # Scenario 3 (checkout flow)
 │   ├── api-ui-validation.spec.js  # Bonus (API + UI cross-check)
-│   └── user-bugs.spec.js          # Parameterised bug matrix for all 6 users
+│   ├── api-carts.spec.js          # API-only: GET/POST/PUT/PATCH/DELETE contract
+│   └── user-bugs.spec.js          # Known-bug matrix for all 6 users
 ├── test-data/               # JSON test data (no logic)
 │   ├── users.json
 │   ├── products.json
 │   └── checkout.json
-├── utils/                   # Reusable helpers (login, data access)
-│   └── helpers.js
-├── docs/                    # Living documentation (gitignored, local only)
-│   ├── plan.md                    # Prioritised delivery plan
-│   ├── test-plan-saucedemo.md     # Simple test plan matrix
-│   ├── test-data-flow.md          # How data flows through the tests
-│   └── why-json-for-test-data.md  # Rationale for JSON test data
+├── utils/                   # Reusable helpers + Playwright fixtures
+│   ├── helpers.js                 # loginAs*, testData bundle, envOrDefault
+│   └── fixtures.js                # test.extend adds dummyJsonUsers / dummyJsonCarts
 ├── postman/                 # Postman collections (DummyJSON, Qase)
-│   ├── DummyJSON-Carts.postman_collection.json
-│   ├── Qase-TestCases.postman_collection.json
-│   └── README.md
 ├── playwright.config.js     # Playwright + reporters + baseURL config
 ├── Jenkinsfile              # Jenkins declarative pipeline
 ├── .env                     # Local secrets (gitignored)
@@ -139,35 +290,27 @@ playwright_demo/
 └── package.json
 ```
 
----
+### Reports & artefacts
 
-## Assumptions
+- **HTML report:** `playwright-report/index.html` -- open with `npm run report`.
+- **JUnit XML:** `test-results/junit.xml` -- consumed by CI.
+- **Traces / videos / screenshots:** `test-results/` -- kept only for failing tests.
 
-- The test target `https://www.saucedemo.com` remains publicly reachable and
-  its credentials (`standard_user`, `locked_out_user`, etc.) are stable, as
-  documented on the site's login page.
-- The default password (`secret_sauce`) is public demo data and safe to check
-  into the `.env.example` template.
-- Chromium alone is sufficient for the assignment; Firefox / WebKit projects
-  are commented out in `playwright.config.js` and can be re-enabled after
-  running `npx playwright install firefox webkit`.
-- One retry locally, two in CI, mirrors real-world flake handling without
-  hiding legitimate failures.
-- The bonus scenario uses DummyJSON instead of ReqRes because ReqRes now
-  gates its public GET endpoints behind an API key; DummyJSON exposes the
-  same shape of user data without authentication.
-- Known SauceDemo product bugs (`problem_user`, `performance_glitch_user`,
-  `error_user`, `visual_user`) are treated as **expected failures** using
-  Playwright's `test.fail()`. Playwright shows the run as green; Qase.IO
-  reports them as `failed` because Qase has no native "expected failure"
-  concept -- this is deliberate so the Qase dashboard still surfaces real
-  product bugs.
-- Qase.IO project code in `.env.example` is a placeholder -- override via
-  `.env` locally or CI secrets/variables when running against a real Qase
-  project.
+### Qase.io integration
 
----
+Already wired end-to-end. `.env` holds the API token and the project code
+(`SAUCEPW`). Set `QASE_MODE=testops` to publish results; leave it `off` to
+run purely locally.
 
-## License
+### CI/CD
+
+- **GitHub Actions** (`.github/workflows/playwright.yml`) runs on push /
+  pull request / manual trigger. Job installs Node 20, dependencies, and
+  Chromium, then runs `npm run test:ci` (excludes known bugs) and uploads
+  `playwright-report/` + `test-results/` as artefacts.
+- **Jenkins** (`Jenkinsfile`) has parity with the GitHub workflow: install,
+  browsers, tests, publish JUnit + HTML.
+
+### License
 
 MIT

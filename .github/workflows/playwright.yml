@@ -54,8 +54,8 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
-        run: npx playwright test
+      - name: Run Playwright tests (excludes @known-bug -- see README)
+        run: npm run test:ci
 
       - name: Upload HTML report
         if: always()

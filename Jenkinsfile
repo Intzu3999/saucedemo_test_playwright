@@ -79,15 +79,18 @@ pipeline {
         stage('Run tests') {
             steps {
                 script {
+                    // CI excludes @known-bug tests -- known SauceDemo defects
+                    // are tracked separately (see README) and should not block
+                    // the build. Run `npm test` locally to see them fail red.
                     if (params.QASE_MODE == 'testops') {
                         withCredentials([string(
                             credentialsId: 'qase-testops-api-token',
                             variable: 'QASE_TESTOPS_API_TOKEN'
                         )]) {
-                            sh 'npx playwright test'
+                            sh 'npm run test:ci'
                         }
                     } else {
-                        sh 'npx playwright test'
+                        sh 'npm run test:ci'
                     }
                 }
             }

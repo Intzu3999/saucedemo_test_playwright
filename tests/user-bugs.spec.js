@@ -5,10 +5,22 @@
 // SauceDemo intentionally ships six user accounts, each with a distinct
 // front-end bug baked into the site's JavaScript (per-username `if` branches
 // in the source). Every test in this file asserts the CORRECT / non-buggy
-// behaviour. For accounts where the bug is known to be present we set
-// `test.fail()` so the run stays healthy while still exercising each bug --
-// if SauceDemo ever fixes one, Playwright will surface it as an
-// "unexpected pass" so we know to remove the marker.
+// behaviour.
+//
+// Reporting model:
+//   * Tests that today are expected to fail because SauceDemo has NOT fixed
+//     the bug carry the tag `@known-bug` in their title.
+//   * We do NOT use Playwright's `test.fail()` marker any more -- that made
+//     the Playwright report show them as GREEN (expected failure) while Qase
+//     showed them as RED (failed). Confusing and inconsistent.
+//   * Now: bug present  = RED in both Playwright report and Qase.
+//          bug fixed    = GREEN in both. When that happens, drop the
+//                         `@known-bug` tag so CI starts protecting the fix.
+//
+// Run modes (see package.json):
+//   npm test               -> runs everything. Expect ~10 red @known-bug tests.
+//   npm run test:ci        -> excludes @known-bug. Suite should be GREEN.
+//   npm run test:known-bugs-> ONLY @known-bug. Expect them all to fail today.
 //
 // See docs/test-plan-saucedemo.md for the human-readable matrix.
 
@@ -17,6 +29,16 @@ const { LoginPage } = require('../pages/LoginPage');
 const { InventoryPage } = require('../pages/InventoryPage');
 const { CheckoutPage } = require('../pages/CheckoutPage');
 const { testData, loginAsUser } = require('../utils/helpers');
+
+/**
+ * Attach a machine-readable "known-bug" annotation to the current test so
+ * the reason for failure is visible in Playwright's HTML report and Qase
+ * attachments. Does NOT change pass/fail semantics.
+ * @param {string} description
+ */
+function annotateKnownBug(description) {
+  test.info().annotations.push({ type: 'known-bug', description });
+}
 
 // ---------------------------------------------------------------------------
 // Section 1 -- Login access matrix (parameterized over all 6 users)
@@ -87,10 +109,11 @@ test.describe('User access -- login matrix @login @parametrized', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('problem_user bugs @problem_user @bug', () => {
-  test('every product image should have a unique src', async ({ page }) => {
-    test.fail(
-      true,
-      'Known bug: problem_user renders the same placeholder image for all 6 products.'
+  test('every product image should have a unique src @known-bug', async ({
+    page,
+  }) => {
+    annotateKnownBug(
+      'problem_user renders the same placeholder image for all 6 products.'
     );
     const inventoryPage = await loginAsUser(
       page,
@@ -117,13 +140,14 @@ test.describe('problem_user bugs @problem_user @bug', () => {
   // The buggy list is data-driven from test-data/products.json so the spec
   // itself doesn't need editing when the observation changes.
   for (const productName of testData.products.list) {
-    test(`can add "${productName}" to cart`, async ({ page }) => {
-      const isKnownBrokenForProblemUser =
-        testData.products.problemUserBugs.cannotAddToCart.includes(productName);
+    const isKnownBrokenForProblemUser =
+      testData.products.problemUserBugs.cannotAddToCart.includes(productName);
+    const tag = isKnownBrokenForProblemUser ? ' @known-bug' : '';
+
+    test(`can add "${productName}" to cart${tag}`, async ({ page }) => {
       if (isKnownBrokenForProblemUser) {
-        test.fail(
-          true,
-          `Known bug: problem_user cannot add "${productName}" -- Add-to-Cart click has no effect.`
+        annotateKnownBug(
+          `problem_user cannot add "${productName}" -- Add-to-Cart click has no effect.`
         );
       }
 
@@ -138,10 +162,9 @@ test.describe('problem_user bugs @problem_user @bug', () => {
     });
   }
 
-  test('can remove product after adding', async ({ page }) => {
-    test.fail(
-      true,
-      'Known bug: for problem_user the Remove button on a product card does nothing -- the item stays in the cart.'
+  test('can remove product after adding @known-bug', async ({ page }) => {
+    annotateKnownBug(
+      'For problem_user the Remove button on a product card does nothing -- the item stays in the cart.'
     );
     const inventoryPage = await loginAsUser(
       page,
@@ -159,12 +182,11 @@ test.describe('problem_user bugs @problem_user @bug', () => {
     ).toBe(0);
   });
 
-  test('checkout last-name field accepts input independently of first-name', async ({
+  test('checkout last-name field accepts input independently of first-name @known-bug', async ({
     page,
   }) => {
-    test.fail(
-      true,
-      'Known bug: for problem_user, characters typed into the Last Name field are routed into the First Name field one character at a time.'
+    annotateKnownBug(
+      'For problem_user, characters typed into the Last Name field are routed into the First Name field one character at a time.'
     );
     const inventoryPage = await loginAsUser(
       page,
@@ -197,10 +219,16 @@ test.describe('problem_user bugs @problem_user @bug', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('performance_glitch_user bugs @performance_glitch_user @bug', () => {
-  // Login flow should reach the inventory page in well under 3 seconds on a
-  // healthy backend. Known bug: this user gets an intentional ~5s delay.
-  test('login redirect completes in under 3 seconds', async ({ page }) => {
-    test.fail(true, 'Known bug: performance_glitch_user has intentional delays.');
+  // Prompt-test-scenarios.md: "lags, delays, several seconds on every move,
+  // text inputs, and button clicks." We assert the SLA on two representative
+  // actions -- login redirect and Add-to-Cart -- so a fix (or a further
+  // regression) is caught even if only one path is instrumented.
+  const LATENCY_SLA_MS = 3000;
+
+  test('login redirect completes within SLA @known-bug', async ({ page }) => {
+    annotateKnownBug(
+      `performance_glitch_user has intentional delays. SLA: < ${LATENCY_SLA_MS}ms.`
+    );
 
     const loginPage = new LoginPage(page);
     await loginPage.open();
@@ -215,8 +243,33 @@ test.describe('performance_glitch_user bugs @performance_glitch_user @bug', () =
 
     expect(
       elapsedMs,
-      `Login redirect took ${elapsedMs}ms, expected < 3000ms`
-    ).toBeLessThan(3000);
+      `Login redirect took ${elapsedMs}ms, expected < ${LATENCY_SLA_MS}ms`
+    ).toBeLessThan(LATENCY_SLA_MS);
+  });
+
+  test('add-to-cart click reflects on the cart badge within SLA @known-bug', async ({
+    page,
+  }) => {
+    annotateKnownBug(
+      `performance_glitch_user has intentional per-click delays on inventory actions too, not just on login redirect. SLA: < ${LATENCY_SLA_MS}ms.`
+    );
+    const inventoryPage = await loginAsUser(
+      page,
+      testData.users.performanceGlitch.username,
+      testData.users.performanceGlitch.password
+    );
+
+    const start = Date.now();
+    await inventoryPage.addProductToCart(testData.products.backpack.name);
+    await expect(inventoryPage.cartBadge).toHaveText('1', {
+      timeout: LATENCY_SLA_MS,
+    });
+    const elapsedMs = Date.now() - start;
+
+    expect(
+      elapsedMs,
+      `Add-to-cart -> badge update took ${elapsedMs}ms, expected < ${LATENCY_SLA_MS}ms`
+    ).toBeLessThan(LATENCY_SLA_MS);
   });
 });
 
@@ -225,10 +278,9 @@ test.describe('performance_glitch_user bugs @performance_glitch_user @bug', () =
 // ---------------------------------------------------------------------------
 
 test.describe('error_user bugs @error_user @bug', () => {
-  test('checkout last-name field is responsive', async ({ page }) => {
-    test.fail(
-      true,
-      'Known bug: for error_user, the Last Name field on checkout step 1 does not accept keyboard input.'
+  test('checkout last-name field is responsive @known-bug', async ({ page }) => {
+    annotateKnownBug(
+      'For error_user, the Last Name field on checkout step 1 does not accept keyboard input.'
     );
     const inventoryPage = await loginAsUser(
       page,
@@ -246,12 +298,11 @@ test.describe('error_user bugs @error_user @bug', () => {
     await expect(checkoutPage.lastNameInput).toHaveValue('TestLast');
   });
 
-  test('submitting checkout with empty last name shows an inline error', async ({
+  test('submitting checkout with empty last name shows an inline error @known-bug', async ({
     page,
   }) => {
-    test.fail(
-      true,
-      'Known bug: error_user does not see the required-field error; clicking Continue silently navigates back one page.'
+    annotateKnownBug(
+      'error_user does not see the required-field error; clicking Continue silently navigates back one page.'
     );
     const inventoryPage = await loginAsUser(
       page,
@@ -279,12 +330,11 @@ test.describe('error_user bugs @error_user @bug', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('visual_user bugs @visual_user @bug', () => {
-  test('6th product Add-to-Cart button stays inside its card', async ({
+  test('6th product Add-to-Cart button stays inside its card @known-bug', async ({
     page,
   }) => {
-    test.fail(
-      true,
-      'Known bug: for visual_user, the 6th product card renders its Add-to-Cart button outside the card boundary.'
+    annotateKnownBug(
+      'For visual_user, the 6th product card renders its Add-to-Cart button outside the card boundary.'
     );
     const inventoryPage = await loginAsUser(
       page,
