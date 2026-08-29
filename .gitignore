@@ -12,6 +12,10 @@ playwright-report/
 playwright/.cache/
 blob-report/
 
+# CI reporter log -- teed by GH Actions / Jenkins outside Playwright's
+# outputDir so the URL-extraction step can grep it. Never committed.
+ci-logs/
+
 # Logs
 *.log
 npm-debug.log*
