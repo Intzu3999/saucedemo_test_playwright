@@ -171,25 +171,39 @@ jobs:
         with:
           path: playwright-report/
 
+      # `continue-on-error: true` -- if the github-pages environment blocks
+      # this branch (e.g. PR ref not whitelisted), we still want the sticky
+      # comment step below to fire with the Qase link and a fallback message.
       - name: Deploy Playwright report to GitHub Pages
         id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
 
       - name: Log deployment URL
+        if: always()
         run: |
-          echo "::notice title=Playwright HTML report::${{ steps.deployment.outputs.page_url }}"
+          URL='${{ steps.deployment.outputs.page_url }}'
+          if [ -n "$URL" ]; then
+            echo "::notice title=Playwright HTML report::$URL"
+          else
+            echo "::warning title=Playwright HTML report::Pages deploy skipped or blocked. Download the 'playwright-report' artifact from this run instead."
+          fi
 
+      # `if: always()` so the comment still posts when the Pages deploy is
+      # blocked by environment protection or fails for any other reason --
+      # reviewers should always see at least the Qase link and the artifact
+      # fallback link.
       - name: Comment PR with report links
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: test-run-links
           message: |
             ### Test run reports
 
-            | Report | Public link (no login required) |
+            | Report | Public link |
             |---|---|
-            | Playwright HTML | ${{ steps.deployment.outputs.page_url }} |
+            | Playwright HTML | ${{ steps.deployment.outputs.page_url || format('_Pages deploy blocked/failed -- [download artifact from run]({0}/{1}/actions/runs/{2})_', github.server_url, github.repository, github.run_id) }} |
             | Qase.io | ${{ needs.test.outputs.qase-link || '_N/A -- Qase disabled or token not set_' }} |
 
-            <sub>Auto-updated on every push. Playwright report is overwritten on each deploy; Qase run history is retained per Qase's plan limits.</sub>
+            <sub>Auto-updated on every push. Playwright report is overwritten on each Pages deploy; Qase run history is retained per Qase's plan limits.</sub>

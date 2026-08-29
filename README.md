@@ -12,11 +12,31 @@ and the Page Object Model pattern.
 git clone git@github.com:Intzu3999/saucedemo_test_playwright.git
 cd saucedemo_test_playwright
 
+# Install playwright
 npm ci
 npx playwright install --with-deps chromium
 
+# Run test
 npm test
 ```
+
+Other convenience scripts
+```bash
+npm run test:headed    # run with a visible browser
+npm run test:ui        # Playwright's interactive UI mode
+npm run test:chromium  # explicit chromium-only run
+npm run test:qase      # enable Qase.IO reporter (requires token in .env)
+npm run report         # open the last HTML report
+```
+
+Filter by tag:
+
+```bash
+npx playwright test --grep "@smoke"
+npx playwright test --grep "@checkout"
+npx playwright test --grep "@bonus"
+```
+
 
 **What you should see after `npm test` (39 tests total):**
 
