@@ -19,6 +19,10 @@ ci-logs/
 # Logs
 *.log
 npm-debug.log*
+# Local diagnostic output (e.g. Qase reporter debug=true dumps, tee'd
+# terminal output). Regenerable, sometimes 100s of KB, and leaks local
+# file paths / machine names -- never commit.
+logs/
 
 # OS files
 .DS_Store

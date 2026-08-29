@@ -8,7 +8,9 @@
     "test:ci": "playwright test --grep-invert=@known-bug",
     "test:known-bugs": "playwright test --grep=@known-bug",
     "test:smoke": "playwright test --grep=@smoke",
-    "install:browsers": "playwright install --with-deps"
+    "install:browsers": "playwright install --with-deps",
+    "qase:cleanup": "node scripts/qase-cleanup.mjs",
+    "qase:cleanup:auto": "node scripts/qase-cleanup.mjs --all"
   },
   "keywords": [
     "playwright",

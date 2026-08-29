@@ -236,9 +236,6 @@ which is the first end-to-end demonstration of the pipeline.
 
 ## Additional information
 
-Everything below is background context for reviewers who want the deeper
-picture. Not needed to run the tests.
-
 ### Framework overview
 
 - **Language / runtime:** JavaScript on Node.js 20+.
@@ -310,6 +307,32 @@ saucedemo_test_playwright/
 Already wired end-to-end. `.env` holds the API token and the project code
 (`SAUCEPW`). Set `QASE_MODE=testops` to publish results; leave it `off` to
 run purely locally.
+
+When `QASE_TESTOPS_SHOW_PUBLIC_REPORT_LINK=true` (default in `.env`), the
+reporter prints both URLs at the end of every run:
+
+```
+qase: Test run link:      https://app.qase.io/run/SAUCEPW/dashboard/<id>
+qase: Public report link: https://app.qase.io/public/report/<token>
+```
+
+The internal link needs a Qase login; the public link is view-only, no login.
+
+#### Cleaning up phantom / stuck Qase runs
+
+If a test run is aborted (Ctrl+C, IDE kill, crash), the reporter's `onBegin`
+already created the run on Qase but `onEnd` never fires -- so the run is
+stuck "In progress" with 0 stats. Fix with:
+
+```bash
+npm run qase:cleanup                    # dry-run: show stuck + empty runs
+npm run qase:cleanup -- --complete      # mark stuck runs complete
+npm run qase:cleanup -- --delete-empty  # delete runs with 0 results
+npm run qase:cleanup:auto               # both (--all)
+```
+
+Script lives at `scripts/qase-cleanup.mjs` and uses the same
+`QASE_TESTOPS_API_TOKEN` / `QASE_TESTOPS_PROJECT` from `.env`.
 
 ### CI/CD
 
