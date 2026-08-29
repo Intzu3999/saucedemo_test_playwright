@@ -8,15 +8,31 @@ on:
   workflow_dispatch:
     inputs:
       qase_mode:
-        description: 'Qase reporter mode (off | testops)'
+        description: 'Qase reporter mode: off | testops. Leave blank to auto-detect from the QASE_TESTOPS_API_TOKEN secret (recommended).'
         required: false
-        default: 'off'
+        default: ''
+
+# Cancel any in-progress run for the same branch when a new commit is pushed.
+# Prevents wasted CI minutes and outdated PR comments.
+concurrency:
+  group: playwright-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege default. Jobs that need more (pages: write, pull-requests:
+# write) opt in at the job level.
+permissions:
+  contents: read
 
 jobs:
   test:
     name: Run Playwright tests
     timeout-minutes: 30
     runs-on: ubuntu-latest
+
+    # Expose the extracted Qase public URL so the downstream `publish-report`
+    # job can include it in the sticky PR comment.
+    outputs:
+      qase-link: ${{ steps.qase.outputs.link }}
 
     env:
       BASE_URL: https://www.saucedemo.com
@@ -30,13 +46,23 @@ jobs:
       HEADLESS: 'true'
       BROWSER: chromium
       REQRES_BASE_URL: https://reqres.in/api
-      # Qase reporter - defaults to off; can be flipped via manual trigger or
-      # by setting the QASE_TESTOPS_API_TOKEN secret in the repo.
+      # Qase reporter -- auto-detects from the QASE_TESTOPS_API_TOKEN secret:
+      #   * secret set   -> QASE_MODE=testops (publish to Qase cloud)
+      #   * secret unset -> QASE_MODE=off     (skip Qase upload, tests still run)
+      # Override manually via the workflow_dispatch `qase_mode` input.
       QASE_MODE: ${{ github.event.inputs.qase_mode || (secrets.QASE_TESTOPS_API_TOKEN != '' && 'testops' || 'off') }}
       QASE_TESTOPS_API_TOKEN: ${{ secrets.QASE_TESTOPS_API_TOKEN }}
-      QASE_TESTOPS_PROJECT: ${{ vars.QASE_TESTOPS_PROJECT || 'DEMO' }}
+      # Project code lives in the repo `vars` (Settings -> Secrets and variables
+      # -> Actions -> Variables). Falls back to SAUCEPW because that is this
+      # repo's default Qase project. Forks that use a different project code
+      # should set `vars.QASE_TESTOPS_PROJECT` instead of editing this file.
+      QASE_TESTOPS_PROJECT: ${{ vars.QASE_TESTOPS_PROJECT || 'SAUCEPW' }}
       QASE_TESTOPS_RUN_TITLE: "GH Actions - ${{ github.run_number }} - ${{ github.ref_name }}"
       QASE_TESTOPS_RUN_COMPLETE: 'true'
+      # Expose the completed Qase test run as a public view-only link and
+      # print it to stdout. The Extract Qase step below greps it out of the
+      # tee'd log and the publish-report job puts it in the sticky comment.
+      QASE_TESTOPS_SHOW_PUBLIC_REPORT_LINK: 'true'
 
     steps:
       - name: Checkout
@@ -51,11 +77,38 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Cache Playwright browsers (~200 MB) keyed on package-lock.json so a
+      # dependency-only PR reuses the cached browsers instead of redownloading.
+      # `npx playwright install` is a no-op when the correct browser version
+      # is already on disk, so we run it unconditionally.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-browsers-${{ runner.os }}-
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright tests (excludes @known-bug -- see README)
-        run: npm run test:ci
+        timeout-minutes: 20
+        run: |
+          mkdir -p test-results
+          npm run test:ci 2>&1 | tee test-results/reporter.log
+
+      - name: Extract Qase public report link
+        id: qase
+        if: always()
+        run: |
+          LINK=$(grep -oE 'https://app\.qase\.io/public/report/[a-zA-Z0-9_-]+' test-results/reporter.log | head -1 || true)
+          echo "link=$LINK" >> "$GITHUB_OUTPUT"
+          if [ -n "$LINK" ]; then
+            echo "::notice title=Qase public report::$LINK"
+          else
+            echo "::warning::No Qase public report link found in reporter output. Is QASE_MODE=testops and QASE_TESTOPS_SHOW_PUBLIC_REPORT_LINK=true?"
+          fi
 
       - name: Upload HTML report
         if: always()
@@ -65,10 +118,78 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
-      - name: Upload test results (traces, screenshots, videos)
+      - name: Upload test results (traces, screenshots, videos, reporter log)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: test-results/
           retention-days: 14
+
+  # Publish the Playwright HTML report to GitHub Pages so reviewers can open
+  # it in a browser without signing in or downloading an artifact. Also posts
+  # the combined "test run reports" sticky comment on the PR.
+  #
+  # PREREQUISITE (one-time, done in the repo UI):
+  #   Settings -> Pages -> Source: "GitHub Actions"
+  # Until you do that, this job will fail on the Setup Pages step -- tests
+  # in the `test` job still succeed, artifacts are still uploaded.
+  publish-report:
+    name: Publish HTML report + post PR comment
+    needs: test
+    # Do not attempt Pages deployment on PRs from forks -- GITHUB_TOKEN does
+    # not carry write permissions for those. Non-PR events (push, dispatch)
+    # always run.
+    if: >-
+      always() &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write        # deploy-pages needs this
+      id-token: write     # required for the OIDC token used by deploy-pages
+      pull-requests: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Download HTML report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact (from playwright-report/)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: playwright-report/
+
+      - name: Deploy Playwright report to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Log deployment URL
+        run: |
+          echo "::notice title=Playwright HTML report::${{ steps.deployment.outputs.page_url }}"
+
+      - name: Comment PR with report links
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: test-run-links
+          message: |
+            ### Test run reports
+
+            | Report | Public link (no login required) |
+            |---|---|
+            | Playwright HTML | ${{ steps.deployment.outputs.page_url }} |
+            | Qase.io | ${{ needs.test.outputs.qase-link || '_N/A -- Qase disabled or token not set_' }} |
+
+            <sub>Auto-updated on every push. Playwright report is overwritten on each deploy; Qase run history is retained per Qase's plan limits.</sub>
