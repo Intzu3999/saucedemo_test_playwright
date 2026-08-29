@@ -23,8 +23,13 @@ const BASE_URL = process.env.BASE_URL ?? 'https://www.saucedemo.com';
 
 // Qase reporter is only added when QASE_MODE is set to a non-"off" value.
 // Modes: 'testops' (send to Qase cloud) | 'report' (local file) | 'off' (disabled)
+//
+// Also skipped when `--list` is passed to Playwright: the reporter's lifecycle
+// hooks (onBegin / onEnd) would still fire for a list-only invocation and
+// create a phantom empty run on the Qase dashboard (0 tests, 0s duration).
 const qaseMode = (process.env.QASE_MODE ?? 'off').toLowerCase();
-const qaseEnabled = qaseMode !== 'off' && qaseMode !== '';
+const isListingOnly = process.argv.some((a) => a === '--list' || a === '--list-only');
+const qaseEnabled = qaseMode !== 'off' && qaseMode !== '' && !isListingOnly;
 
 /** @type {import('@playwright/test').ReporterDescription[]} */
 const reporters = [

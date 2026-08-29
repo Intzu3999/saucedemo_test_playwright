@@ -5,14 +5,9 @@
   "private": true,
   "scripts": {
     "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:ui": "playwright test --ui",
-    "test:chromium": "playwright test --project=chromium",
-    "test:qase": "cross-env QASE_MODE=testops playwright test",
     "test:ci": "playwright test --grep-invert=@known-bug",
     "test:known-bugs": "playwright test --grep=@known-bug",
     "test:smoke": "playwright test --grep=@smoke",
-    "report": "playwright show-report",
     "install:browsers": "playwright install --with-deps"
   },
   "keywords": [
@@ -27,7 +22,6 @@
   "license": "MIT",
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "cross-env": "^10.1.0",
     "dotenv": "^17.4.2",
     "playwright-qase-reporter": "^2.7.0"
   }

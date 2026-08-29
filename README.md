@@ -20,15 +20,6 @@ npx playwright install --with-deps chromium
 npm test
 ```
 
-Other convenience scripts
-```bash
-npm run test:headed    # run with a visible browser
-npm run test:ui        # Playwright's interactive UI mode
-npm run test:chromium  # explicit chromium-only run
-npm run test:qase      # enable Qase.IO reporter (requires token in .env)
-npm run report         # open the last HTML report
-```
-
 Filter by tag:
 
 ```bash
@@ -37,19 +28,19 @@ npx playwright test --grep "@checkout"
 npx playwright test --grep "@bonus"
 ```
 
-
 **What you should see after `npm test` (39 tests total):**
 
-- **29 pass** -- everything the framework claims should work, works.
-- **10 fail** -- these are SauceDemo's *own* known product bugs, tagged
-  `@known-bug`. They are real defects on the site (not framework issues); the
-  tests are asserting the correct behaviour and calling them out. See
-  [Expected test results](#expected-test-results) below.
+- **28 pass** -- everything the framework claims should work, works.
+- **11 fail** -- 10 are SauceDemo's *own* known product bugs, tagged
+  `@known-bug` (the 11th `@known-bug` test currently passes -- see the note
+  under [Expected test results](#expected-test-results) below). They are
+  real defects on the site (not framework issues); the tests are asserting
+  the correct behaviour and calling them out.
 
 To open the HTML report:
 
 ```bash
-npm run report
+npx playwright show-report
 ```
 
 ---
@@ -58,13 +49,18 @@ npm run report
 
 | Command | What it runs | Expected result |
 |---|---|---|
-| `npm test` | Everything (39 tests) | 29 pass + 10 fail (known bugs) |
-| `npm run test:ci` | Everything except `@known-bug` | 28 pass, all green (used by CI) |
+| `npm test` | Everything (39 tests) | 28 pass + 11 fail (10 known bugs + 1 known-bug that currently passes) |
+| `npm run test:ci` | Everything except `@known-bug` (28 tests) | All green -- used by CI |
 | `npm run test:known-bugs` | Only `@known-bug` (11 tests) | 10 fail (bug still present) + 1 pass (see note) |
-| `npm run test:smoke` | Only `@smoke` | 4 pass |
-| `npm run test:headed` | Everything with a visible browser | Same as `npm test` |
-| `npm run test:ui` | Playwright's interactive UI mode | Interactive |
-| `npm run test:qase` | Publish results to Qase.io | Same as `npm test`, plus cloud upload |
+| `npm run test:smoke` | Only `@smoke` (4 tests) | 4 pass |
+
+To pass extra flags to any of these, use `--` after the script name:
+
+```bash
+npm test -- --headed         # visible browser
+npm test -- --ui             # Playwright's interactive UI mode
+npm test -- --debug          # step-through debugger
+```
 
 ---
 
@@ -209,16 +205,9 @@ The screenshots below are from
 [PR #1 -- MVP framework merge](https://github.com/Intzu3999/saucedemo_test_playwright/pull/1),
 which is the first end-to-end demonstration of the pipeline.
 
-### GitHub Actions workflow triggered on PR
+### CI View Test Reports at Sticky Comment (Playwright and Qase IO Report)
 
-![GitHub Actions workflow running](https://github.com/user-attachments/assets/ba5cdd81-8985-413f-952e-b684a8d71fe6)
-
-### Playwright HTML report (downloadable artefact from CI)
-
-![Playwright test run summary + report](https://github.com/user-attachments/assets/23572c3e-0dfd-4d28-94e8-e9b51375ee0b)
-
-Artifact download URL:
-[`actions/runs/32875492209/artifacts/9573767079`](https://github.com/Intzu3999/saucedemo_test_playwright/actions/runs/32875492209/artifacts/9573767079)
+![Sticky PR comment linking to Playwright HTML report + Qase.io public run](./images/pr2-sticky-comment.png)
 
 ### Qase.io -- test run created automatically from Playwright
 
@@ -312,7 +301,7 @@ saucedemo_test_playwright/
 
 ### Reports & artefacts
 
-- **HTML report:** `playwright-report/index.html` -- open with `npm run report`.
+- **HTML report:** `playwright-report/index.html` -- open with `npx playwright show-report`.
 - **JUnit XML:** `test-results/junit.xml` -- consumed by CI.
 - **Traces / videos / screenshots:** `test-results/` -- kept only for failing tests.
 
