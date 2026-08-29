@@ -4,7 +4,7 @@ const { LoginPage } = require('../pages/LoginPage');
 const { InventoryPage } = require('../pages/InventoryPage');
 const { testData } = require('../utils/helpers');
 
-test.describe('Scenario 1 - Login with valid credentials', () => {
+test.describe('Login -- valid credentials', () => {
   test('valid user lands on the inventory page @login @smoke', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const inventoryPage = new InventoryPage(page);
@@ -20,7 +20,7 @@ test.describe('Scenario 1 - Login with valid credentials', () => {
   });
 });
 
-test.describe('Scenario 4 - Login with invalid credentials', () => {
+test.describe('Login -- invalid credentials', () => {
   test('invalid user sees the expected error message @login @negative', async ({
     page,
   }) => {

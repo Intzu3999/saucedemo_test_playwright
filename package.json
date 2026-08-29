@@ -4,6 +4,7 @@
   "description": "Playwright UI automation framework for saucedemo.com using Page Object Model, with Qase.IO reporting and CI/CD integrations.",
   "private": true,
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "test": "playwright test",
     "test:ci": "playwright test --grep-invert=@known-bug",
     "test:known-bugs": "playwright test --grep=@known-bug",
