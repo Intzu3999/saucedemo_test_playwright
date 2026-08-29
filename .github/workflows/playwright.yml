@@ -8,15 +8,27 @@ on:
   workflow_dispatch:
     inputs:
       qase_mode:
-        description: 'Qase reporter mode (off | testops)'
+        description: 'Qase reporter mode: off | testops. Leave blank to auto-detect from the QASE_TESTOPS_API_TOKEN secret.'
         required: false
-        default: 'off'
+        default: ''
+
+concurrency:
+  group: playwright-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   test:
     name: Run Playwright tests
     timeout-minutes: 30
     runs-on: ubuntu-latest
+
+    # Exposes extracted Qase public URL so downstream
+    # 'publish-report' can include it in the sticky PR comment
+    outputs:
+      qase-link: ${{ steps.qase.outputs.link }}
 
     env:
       BASE_URL: https://www.saucedemo.com
@@ -30,13 +42,13 @@ jobs:
       HEADLESS: 'true'
       BROWSER: chromium
       REQRES_BASE_URL: https://reqres.in/api
-      # Qase reporter - defaults to off; can be flipped via manual trigger or
-      # by setting the QASE_TESTOPS_API_TOKEN secret in the repo.
+      # Auto-detect Qase mode from the token secret (unset -> off, set -> testops).
       QASE_MODE: ${{ github.event.inputs.qase_mode || (secrets.QASE_TESTOPS_API_TOKEN != '' && 'testops' || 'off') }}
       QASE_TESTOPS_API_TOKEN: ${{ secrets.QASE_TESTOPS_API_TOKEN }}
-      QASE_TESTOPS_PROJECT: ${{ vars.QASE_TESTOPS_PROJECT || 'DEMO' }}
+      QASE_TESTOPS_PROJECT: ${{ vars.QASE_TESTOPS_PROJECT || 'SAUCEPW' }}
       QASE_TESTOPS_RUN_TITLE: "GH Actions - ${{ github.run_number }} - ${{ github.ref_name }}"
       QASE_TESTOPS_RUN_COMPLETE: 'true'
+      QASE_TESTOPS_SHOW_PUBLIC_REPORT_LINK: 'true'
 
     steps:
       - name: Checkout
@@ -51,11 +63,45 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-browsers-${{ runner.os }}-
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
-        run: npx playwright test
+      # Reporter log lives in ci-logs/ (NOT test-results/): Playwright's
+      # outputDir is test-results/ and it wipes that folder at the start of
+      # every run, which would unlink our tee'd log mid-write.
+      - name: Run Playwright tests (excludes @known-bug)
+        timeout-minutes: 20
+        run: |
+          mkdir -p ci-logs
+          npm run test:ci 2>&1 | tee ci-logs/reporter.log
+
+      - name: Extract Qase public report link
+        id: qase
+        if: always()
+        run: |
+          LINK=$(grep -oE 'https://app\.qase\.io/public/report/[a-zA-Z0-9_-]+' ci-logs/reporter.log | head -1 || true)
+          echo "link=$LINK" >> "$GITHUB_OUTPUT"
+          if [ -n "$LINK" ]; then
+            echo "::notice title=Qase public report::$LINK"
+          else
+            echo "::warning::No Qase public report link found. Is QASE_MODE=testops and QASE_TESTOPS_SHOW_PUBLIC_REPORT_LINK=true?"
+          fi
+
+      - name: Upload reporter log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          path: ci-logs/
+          retention-days: 14
 
       - name: Upload HTML report
         if: always()
@@ -72,3 +118,74 @@ jobs:
           name: test-results
           path: test-results/
           retention-days: 14
+
+  # Deploys the HTML report to GitHub Pages and posts the sticky PR comment.
+  # PREREQUISITE: Settings -> Pages -> Source: "GitHub Actions" (one-time).
+  # Skipped on fork PRs (GITHUB_TOKEN has no write perms in that context).
+  publish-report:
+    name: Publish HTML report + post PR comment
+    needs: test
+    if: >-
+      always() &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      pull-requests: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Download HTML report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: playwright-report/
+
+      # continue-on-error so the sticky comment below still fires if the
+      # github-pages environment blocks this branch (e.g. PR ref not
+      # whitelisted -- fix at Settings -> Environments -> github-pages).
+      - name: Deploy Playwright report to GitHub Pages
+        id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Log deployment URL
+        if: always()
+        run: |
+          URL='${{ steps.deployment.outputs.page_url }}'
+          if [ -n "$URL" ]; then
+            echo "::notice title=Playwright HTML report::$URL"
+          else
+            echo "::warning title=Playwright HTML report::Pages deploy skipped or blocked. Download the 'playwright-report' artifact instead."
+          fi
+
+      # if: always() so the comment posts even when Pages deploy is blocked.
+      - name: Comment PR with report links
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: test-run-links
+          message: |
+            ### Test run reports
+
+            | Report | Public link |
+            |---|---|
+            | Playwright HTML | ${{ steps.deployment.outputs.page_url || format('_Pages deploy blocked/failed -- [download artifact from run]({0}/{1}/actions/runs/{2})_', github.server_url, github.repository, github.run_id) }} |
+            | Qase.io | ${{ needs.test.outputs.qase-link || '_N/A -- Qase disabled or reporter output not captured_' }} |
+
+            <sub>Auto-updated on every push. Playwright report overwrites on each deploy; Qase run history retained per plan.</sub>

@@ -45,6 +45,15 @@ if (qaseEnabled) {
         },
         project: process.env.QASE_TESTOPS_PROJECT,
         uploadAttachments: true,
+        // When true, the reporter flips the completed run to publicly viewable
+        // and prints a "Public report link: https://..." line to stdout. Anyone
+        // with that link can view the run dashboard -- no Qase account needed.
+        // Off by default because it makes the run world-readable. Best left on
+        // only in CI so reviewers on a PR can open the report without logging
+        // in; leave off locally.
+        showPublicReportLink:
+          (process.env.QASE_TESTOPS_SHOW_PUBLIC_REPORT_LINK ?? 'false').toLowerCase() ===
+          'true',
         run: {
           title:
             process.env.QASE_TESTOPS_RUN_TITLE ||

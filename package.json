@@ -9,6 +9,9 @@
     "test:ui": "playwright test --ui",
     "test:chromium": "playwright test --project=chromium",
     "test:qase": "cross-env QASE_MODE=testops playwright test",
+    "test:ci": "playwright test --grep-invert=@known-bug",
+    "test:known-bugs": "playwright test --grep=@known-bug",
+    "test:smoke": "playwright test --grep=@smoke",
     "report": "playwright show-report",
     "install:browsers": "playwright install --with-deps"
   },
