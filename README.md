@@ -302,9 +302,10 @@ Documented example of automation adding QA signal manual observation missed.
 
 ## 6. Screenshots -- CI, PR reports, Qase.io
 
-The pipeline runs on every push and PR, publishes the HTML report to GitHub
-Pages, and posts a sticky PR comment linking to both the Playwright report
-and the Qase.io public run.
+The pipeline runs on every push and PR, publishes the HTML report to its own
+folder on GitHub Pages, and posts a PR comment linking to both that run's
+Playwright report and its Qase.io public run. Both links are unique per run,
+so earlier reports stay reachable.
 
 To try it end-to-end:
 
@@ -475,8 +476,13 @@ Script lives at `scripts/qase-cleanup.mjs` and reuses the
 - **GitHub Actions** (`.github/workflows/playwright.yml`) runs on push,
   pull request, and manual trigger. Installs Node 20, dependencies, and
   Chromium, then runs `npm run test:ci` (excludes known bugs) and uploads
-  `playwright-report/` + `test-results/` as artefacts. Also deploys the
-  HTML report to GitHub Pages and posts a sticky PR comment with links.
+  `playwright-report/` + `test-results/` as artefacts. It then publishes the
+  HTML report to GitHub Pages under a per-run folder
+  (`reports/pr-<n>/run-<n>/`) and posts a fresh PR comment linking to that
+  run's Playwright report and its Qase.io public run.
+- **GitHub Pages setup (one-time):** Settings -> Pages -> Source
+  "Deploy from a branch", branch `gh-pages`, folder `/ (root)`. Reports
+  accumulate on that branch, so older runs stay reachable.
 - **Jenkins** (`Jenkinsfile`) has parity with the GitHub workflow:
   install, browsers, tests, publish JUnit + HTML.
 

@@ -119,8 +119,12 @@ jobs:
           path: test-results/
           retention-days: 14
 
-  # Deploys the HTML report to GitHub Pages and posts the sticky PR comment.
-  # PREREQUISITE: Settings -> Pages -> Source: "GitHub Actions" (one-time).
+  # Publishes the HTML report to a per-run folder on GitHub Pages and posts
+  # the sticky PR comment.
+  #
+  # PREREQUISITE: Settings -> Pages -> Source: "Deploy from a branch",
+  # branch "gh-pages", folder "/ (root)" (one-time).
+  #
   # Skipped on fork PRs (GITHUB_TOKEN has no write perms in that context).
   publish-report:
     name: Publish HTML report + post PR comment
@@ -132,14 +136,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
-      pages: write
-      id-token: write
-      pull-requests: write
+      contents: write        # pushes the report to the gh-pages branch
+      pull-requests: write   # posts the sticky comment
 
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    # Serialised across every ref: all runs commit to the same gh-pages
+    # branch, so parallel publishes would race and drop reports.
+    concurrency:
+      group: gh-pages-publish
+      cancel-in-progress: false
 
     steps:
       - name: Download HTML report artifact
@@ -148,44 +152,75 @@ jobs:
           name: playwright-report
           path: playwright-report/
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      # Every run publishes to its own folder so the URL in the PR comment is
+      # unique and permanent. The previous setup deployed to the Pages site
+      # ROOT, which is a fixed URL per repository -- so the link never changed
+      # and each run silently overwrote the last run's report.
+      - name: Compute per-run report path
+        id: paths
+        run: |
+          if [ '${{ github.event_name }}' = 'pull_request' ]; then
+            SLOT="pr-${{ github.event.pull_request.number }}"
+          else
+            SLOT="branch-$(echo '${{ github.ref_name }}' | tr '/' '-')"
+          fi
+          DIR="reports/$SLOT/run-${{ github.run_number }}"
+          # Pages hostnames are lower-case; repo path segment keeps its case.
+          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          REPO='${{ github.repository }}'
+          REPO="${REPO#*/}"
+          SHA='${{ github.event.pull_request.head.sha || github.sha }}'
+          {
+            echo "dir=$DIR"
+            echo "url=https://$OWNER.github.io/$REPO/$DIR/"
+            echo "sha=${SHA:0:7}"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: playwright-report/
-
+      # keep_files is required: without it, publishing into destination_dir
+      # wipes every other folder on the branch (i.e. all previous reports).
       # continue-on-error so the sticky comment below still fires if the
-      # github-pages environment blocks this branch (e.g. PR ref not
-      # whitelisted -- fix at Settings -> Environments -> github-pages).
-      - name: Deploy Playwright report to GitHub Pages
+      # push to gh-pages fails.
+      - name: Publish report to gh-pages
         id: deployment
         continue-on-error: true
-        uses: actions/deploy-pages@v4
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: playwright-report
+          destination_dir: ${{ steps.paths.outputs.dir }}
+          keep_files: true
+          commit_message: 'playwright report: ${{ steps.paths.outputs.dir }}'
 
       - name: Log deployment URL
         if: always()
         run: |
-          URL='${{ steps.deployment.outputs.page_url }}'
-          if [ -n "$URL" ]; then
-            echo "::notice title=Playwright HTML report::$URL"
+          if [ '${{ steps.deployment.outcome }}' = 'success' ]; then
+            echo "::notice title=Playwright HTML report::${{ steps.paths.outputs.url }}"
           else
-            echo "::warning title=Playwright HTML report::Pages deploy skipped or blocked. Download the 'playwright-report' artifact instead."
+            echo "::warning title=Playwright HTML report::gh-pages publish failed. Download the 'playwright-report' artifact instead."
           fi
 
-      # if: always() so the comment posts even when Pages deploy is blocked.
+      # recreate: true deletes the previous comment and posts a new one, so
+      # every push produces a genuinely new comment (and a notification)
+      # instead of silently editing the existing one in place.
+      #
+      # To keep ONE comment edited in place instead, drop `recreate`.
+      # To accumulate one comment per run, replace `recreate` with a
+      # per-run header: `header: test-run-links-${{ github.run_number }}`.
+      #
+      # if: always() so the comment posts even when the publish step fails.
       - name: Comment PR with report links
         if: always() && github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: test-run-links
+          recreate: true
           message: |
-            ### Test run reports
+            ### Test run reports -- run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) @ `${{ steps.paths.outputs.sha }}`
 
             | Report | Public link |
             |---|---|
-            | Playwright HTML | ${{ steps.deployment.outputs.page_url || format('_Pages deploy blocked/failed -- [download artifact from run]({0}/{1}/actions/runs/{2})_', github.server_url, github.repository, github.run_id) }} |
+            | Playwright HTML | ${{ steps.deployment.outcome == 'success' && steps.paths.outputs.url || format('_publish failed -- [download artifact from run]({0}/{1}/actions/runs/{2})_', github.server_url, github.repository, github.run_id) }} |
             | Qase.io | ${{ needs.test.outputs.qase-link || '_N/A -- Qase disabled or reporter output not captured_' }} |
 
-            <sub>Auto-updated on every push. Playwright report overwrites on each deploy; Qase run history retained per plan.</sub>
+            <sub>Posted fresh on every push. Both links are unique to this run -- the Playwright report is published to its own folder, so earlier runs stay reachable on the `gh-pages` branch.</sub>
