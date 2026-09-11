@@ -7,6 +7,7 @@
     "setup": "node scripts/setup.mjs",
     "test": "playwright test",
     "test:ci": "playwright test --grep-invert=@known-bug",
+    "ci:gate": "node scripts/ci-gate.mjs",
     "test:known-bugs": "playwright test --grep=@known-bug",
     "test:smoke": "playwright test --grep=@smoke",
     "install:browsers": "playwright install --with-deps",

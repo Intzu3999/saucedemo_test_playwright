@@ -68,7 +68,8 @@ invocation. Flags after `--` are forwarded to Playwright.
 | # | Command | What it runs | Expected result |
 |---|---|---|---|
 | 1 | `npm test` | Full suite -- 39 tests | 29 pass + 10 fail (10 real SauceDemo bugs, all tagged `@known-bug`) |
-| 2 | `npm run test:ci` | Full suite minus `@known-bug` -- 28 tests | All green -- used by CI |
+| 2 | `npm run test:ci` | Full suite minus `@known-bug` -- 28 tests | All green |
+| 2b | `npm test && npm run ci:gate` | What CI does: full suite, then grade it | Gate passes if only `@known-bug` tests failed |
 | 3 | `npm run test:known-bugs` | Only `@known-bug` -- 11 tests | 10 fail + 1 pass (SauceDemo behaves correctly on that one today) |
 | 4 | `npm run test:smoke` | Only `@smoke` -- 4 tests | 4 pass |
 | 5 | `npm test -- --headed` | Full suite with a visible browser | Same as row 1 |
@@ -264,9 +265,15 @@ distinct UI or performance bugs. See
 - Earlier iterations used Playwright's `test.fail()` marker, which made
   Playwright show them GREEN (expected failure) while Qase showed them RED
   (failed). That inconsistency was removed. **Bug present = RED everywhere.**
-- CI stays green because CI runs `npm run test:ci`, which excludes any test
-  tagged `@known-bug`. When SauceDemo fixes a bug, the test starts passing,
-  we drop the tag, and CI protects the fix from that point on.
+- CI runs the **full** suite, so the Playwright report and the Qase run show
+  all 39 tests with the 10 known bugs red -- a filtered, all-green subset
+  would defeat the point of surfacing them. The check still goes green,
+  because `scripts/ci-gate.mjs` grades the run afterwards and only fails the
+  build when a test *outside* `@known-bug` fails. Expected bug failures never
+  block a merge; a genuine regression does.
+- The gate also flags any `@known-bug` test that **passed**. That means
+  SauceDemo fixed the defect, so the tag should be dropped -- at which point
+  CI starts protecting the fix.
 
 ### 5.3 What "PASS" and "FAIL" mean here
 
@@ -422,7 +429,8 @@ saucedemo_test_playwright/
 │   └── qase-result-dashboard.png
 ├── scripts/                            # Ops scripts (Node CLIs)
 │   ├── setup.mjs                         # First-time repo setup
-│   └── qase-cleanup.mjs                  # Clear stuck / phantom Qase runs
+│   ├── qase-cleanup.mjs                  # Clear stuck / phantom Qase runs
+│   └── build-report-index.mjs            # Builds the gh-pages report index
 ├── playwright.config.js                # Playwright + reporters config
 ├── Jenkinsfile                         # Jenkins declarative pipeline
 ├── .env                                # Local secrets (gitignored)
@@ -475,14 +483,19 @@ Script lives at `scripts/qase-cleanup.mjs` and reuses the
 
 - **GitHub Actions** (`.github/workflows/playwright.yml`) runs on push,
   pull request, and manual trigger. Installs Node 20, dependencies, and
-  Chromium, then runs `npm run test:ci` (excludes known bugs) and uploads
+  Chromium, then runs the full suite and grades it with
+  `scripts/ci-gate.mjs`, which fails the build only on failures outside
+  `@known-bug`. Uploads
   `playwright-report/` + `test-results/` as artefacts. It then publishes the
   HTML report to GitHub Pages under a per-run folder
   (`reports/pr-<n>/run-<n>/`) and posts a fresh PR comment linking to that
   run's Playwright report and its Qase.io public run.
 - **GitHub Pages setup (one-time):** Settings -> Pages -> Source
   "Deploy from a branch", branch `gh-pages`, folder `/ (root)`. Reports
-  accumulate on that branch, so older runs stay reachable.
+  accumulate on that branch, so recent runs stay reachable. The site root
+  lists every published run -- it is regenerated on each publish by
+  `scripts/build-report-index.mjs`, which also prunes to the 5 newest runs
+  per PR/branch (`--keep 5`) to stay inside the 1 GB Pages limit.
 - **Jenkins** (`Jenkinsfile`) has parity with the GitHub workflow:
   install, browsers, tests, publish JUnit + HTML.
 

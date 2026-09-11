@@ -20,6 +20,11 @@ const HEADLESS = (process.env.HEADLESS ?? 'true').toLowerCase() !== 'false';
 const WORKERS = Number(process.env.WORKERS ?? 1);
 const RETRIES = Number(process.env.RETRIES ?? 1);
 const BASE_URL = process.env.BASE_URL ?? 'https://www.saucedemo.com';
+// 'retain-on-first-failure' keeps the trace from the first attempt only.
+// With retries on, 'retain-on-failure' stores one trace per attempt, and
+// traces dominate the published report (~0.7 MB each). The retry traces are
+// near-duplicates, so first-failure keeps what is useful at a third the size.
+const TRACE = process.env.TRACE ?? 'retain-on-first-failure';
 
 // Qase reporter is only added when QASE_MODE is set to a non-"off" value.
 // Modes: 'testops' (send to Qase cloud) | 'report' (local file) | 'off' (disabled)
@@ -36,6 +41,9 @@ const reporters = [
   ['list'],
   ['html', { open: 'never', outputFolder: 'playwright-report' }],
   ['junit', { outputFile: 'test-results/junit.xml' }],
+  // Machine-readable results, consumed by scripts/ci-gate.mjs to tell an
+  // expected @known-bug failure apart from a real regression.
+  ['json', { outputFile: 'test-results/results.json' }],
 ];
 
 if (qaseEnabled) {
@@ -89,7 +97,7 @@ module.exports = defineConfig({
     ignoreHTTPSErrors: IGNORE_HTTPS_ERRORS,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    trace: 'retain-on-failure',
+    trace: TRACE,
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
   },

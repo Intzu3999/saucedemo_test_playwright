@@ -77,11 +77,24 @@ jobs:
       # Reporter log lives in ci-logs/ (NOT test-results/): Playwright's
       # outputDir is test-results/ and it wipes that folder at the start of
       # every run, which would unlink our tee'd log mid-write.
-      - name: Run Playwright tests (excludes @known-bug)
-        timeout-minutes: 20
+      # Runs the FULL suite (all 39) so the Playwright and Qase reports show
+      # the real picture, known bugs included, rather than a filtered
+      # all-green subset. The expected @known-bug failures make this exit
+      # non-zero, so the step is allowed to fail and the gate below decides
+      # whether the build is actually broken.
+      - name: Run Playwright tests (full suite)
+        id: tests
+        continue-on-error: true
+        timeout-minutes: 25
         run: |
           mkdir -p ci-logs
-          npm run test:ci 2>&1 | tee ci-logs/reporter.log
+          set -o pipefail
+          npm test 2>&1 | tee ci-logs/reporter.log
+
+      # Fails the job only if something OUTSIDE @known-bug failed. Expected
+      # known-bug failures keep the check green, so they never block a merge.
+      - name: Evaluate results (known bugs vs regressions)
+        run: npm run ci:gate
 
       - name: Extract Qase public report link
         id: qase
@@ -146,6 +159,22 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      # Two checkouts: 'src' provides the index generator script, 'gh-pages'
+      # is the report store this job appends to.
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          path: src
+
+      # Assumes the gh-pages branch already exists. If it is ever deleted,
+      # recreate it once with an empty orphan commit:
+      #   git switch --orphan gh-pages && git commit --allow-empty -m init && git push -u origin gh-pages
+      - name: Checkout gh-pages store
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+
       - name: Download HTML report artifact
         uses: actions/download-artifact@v4
         with:
@@ -176,20 +205,50 @@ jobs:
             echo "sha=${SHA:0:7}"
           } >> "$GITHUB_OUTPUT"
 
-      # keep_files is required: without it, publishing into destination_dir
-      # wipes every other folder on the branch (i.e. all previous reports).
-      # continue-on-error so the sticky comment below still fires if the
-      # push to gh-pages fails.
-      - name: Publish report to gh-pages
+      # Copy this run's report in alongside the previous ones, record a little
+      # metadata for the index, then regenerate the root index.html so the
+      # site root lists every published run instead of returning 404.
+      #
+      # .nojekyll stops Pages running the report through Jekyll, which would
+      # strip any file or folder whose name begins with an underscore.
+      - name: Stage report and regenerate index
+        run: |
+          set -euo pipefail
+          DEST="gh-pages/${{ steps.paths.outputs.dir }}"
+          mkdir -p "$DEST"
+          cp -R playwright-report/. "$DEST/"
+          cat > "$DEST/meta.json" <<JSON
+          {
+            "run": ${{ github.run_number }},
+            "sha": "${{ steps.paths.outputs.sha }}",
+            "published_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          JSON
+          touch gh-pages/.nojekyll
+          # --keep caps the store: a full-suite report with failure traces is
+          # ~13 MB and Pages serves at most 1 GB, so keep the 5 newest runs
+          # per PR/branch and drop older ones.
+          node src/scripts/build-report-index.mjs gh-pages --keep 5
+
+      # continue-on-error so the sticky comment below still fires if the push
+      # fails. The report and the refreshed index go up in one commit, so the
+      # index can never point at a report that is not there.
+      - name: Publish to gh-pages
         id: deployment
         continue-on-error: true
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: playwright-report
-          destination_dir: ${{ steps.paths.outputs.dir }}
-          keep_files: true
-          commit_message: 'playwright report: ${{ steps.paths.outputs.dir }}'
+        working-directory: gh-pages
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --staged --quiet; then
+            echo "nothing to publish"
+            exit 0
+          fi
+          git commit -m 'playwright report: ${{ steps.paths.outputs.dir }}'
+          git push origin HEAD:gh-pages
 
       - name: Log deployment URL
         if: always()
