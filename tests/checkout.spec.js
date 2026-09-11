@@ -5,7 +5,7 @@ const { CheckoutPage } = require('../pages/CheckoutPage');
 const { CompletePage } = require('../pages/CompletePage');
 const { loginAsStandardUser, testData } = require('../utils/helpers');
 
-test.describe('Scenario 3 - Complete the checkout flow', () => {
+test.describe('Checkout -- happy path + validation', () => {
   test('user can checkout successfully and see confirmation @checkout @smoke @e2e', async ({
     page,
   }) => {

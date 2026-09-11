@@ -19,6 +19,10 @@ ci-logs/
 # Logs
 *.log
 npm-debug.log*
+# Local diagnostic output (e.g. Qase reporter debug=true dumps, tee'd
+# terminal output). Regenerable, sometimes 100s of KB, and leaks local
+# file paths / machine names -- never commit.
+logs/
 
 # OS files
 .DS_Store
@@ -34,11 +38,20 @@ Thumbs.db
 tmp/
 temp/
 
-# CHANGELOG (repo root -- legacy)
-CHANGELOG.md
-
-# Personal changelog folder (self-reference only)
-changelog/
-
-# docs
-docs/
+# docs -- personal working notes stay hidden by default. Reference docs
+# meant for reviewers / contributors are whitelisted below.
+#
+# Committed (reference):
+#   docs/test-cases.md
+#   docs/about_this_repo/**  (test-data-flow.md, etc.)
+#
+# Hidden (personal working space):
+#   docs/plan.md
+#   docs/changelog/**
+#   docs/external_learnings/**
+#
+# NOTE: pattern is "docs/*" (contents), not "docs/" (the directory itself),
+# so the whitelist below can re-include specific files/subfolders. Git will
+# not re-include files inside a directory that is itself excluded.
+docs/*
+!docs/test-cases.md

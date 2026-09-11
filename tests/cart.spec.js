@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 const { CartPage } = require('../pages/CartPage');
 const { loginAsStandardUser, testData } = require('../utils/helpers');
 
-test.describe('Scenario 2 - Add a product to cart', () => {
+test.describe('Cart -- add product', () => {
   test('adding a product updates the cart contents @cart @smoke', async ({
     page,
   }) => {
