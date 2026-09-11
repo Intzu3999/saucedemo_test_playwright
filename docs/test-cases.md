@@ -2,7 +2,9 @@
 
 The complete list of tests in this repo, with descriptions and current
 pass/fail expectations. This is the source of truth for the compact
-"What's tested" table in the [main README](../../README.md#4-whats-tested).
+"What's tested" table in the [main README](../README.md#3-whats-tested),
+which also carries the full per-test tables in
+[section 4](../README.md#4-test-case-inventory-all-39-tests).
 
 Verified against `npx playwright test --list` on Aug 29, 2026.
 
@@ -197,7 +199,7 @@ Includes the parametrized add-to-cart matrix. Automation revealed the
 
 ---
 
-## Traceability to README §4 "What's tested"
+## Traceability to README §3 "What's tested"
 
 | README bucket | Tests in this doc |
 |---|---|
