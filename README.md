@@ -1,4 +1,4 @@
-# SauceDemo Playwright Test Framework
+# SauceDemo Playwright QaseIo Test Framework
 
 End-to-end UI + API automation for
 [https://www.saucedemo.com](https://www.saucedemo.com), built with Playwright,
